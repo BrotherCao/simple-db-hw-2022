@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReadWriteLock;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -38,13 +39,19 @@ public class BufferPool {
      */
     public static final int DEFAULT_PAGES = 50;
 
+    private final int numPages;
+    private final ConcurrentHashMap<Integer,Page> pageStore;
+
+    private ReadWriteLock rwLock;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
      * @param numPages maximum number of pages in this buffer pool.
      */
     public BufferPool(int numPages) {
-        // TODO: some code goes here
+        this.numPages = numPages;
+        pageStore = new ConcurrentHashMap<>();
     }
 
     public static int getPageSize() {
@@ -78,8 +85,17 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // TODO: some code goes here
-        return null;
+        //使用concurrentHashmap
+        rwLock.readLock().lock();
+        Page page = pageStore.get(pid.hashCode());
+        //不存在，则从数据库查到，然后存
+        if(page == null){
+            DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            page = file.readPage(pid);
+            pageStore.put(pid.hashCode(),page);
+        }
+        rwLock.readLock().unlock();
+        return page;
     }
 
     /**
